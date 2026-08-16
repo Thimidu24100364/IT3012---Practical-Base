@@ -2,6 +2,8 @@
 import random
 import tkinter as tk
 
+from agent import SearchAgent
+
 
 class VisualGridHuntGame:
     """A flexible Pacman-style grid environment with support for configurable opponents and larger scales."""
@@ -35,15 +37,13 @@ class VisualGridHuntGame:
             if tuple(op_pos) != (0, 0) and tuple(op_pos) not in self.walls and tuple(op_pos) not in self.food_positions:
                 self.opponents.append(op_pos)
 
-        # NEWLY ADDED - Generate random toxic traps
         self.toxic_traps = set()
-        num_traps = 4  # Change number of traps
-        while len(self.toxic_traps) < num_traps:
+        while len(self.toxic_traps) < 3:
             tx = random.randint(0, self.width - 1)
             ty = random.randint(0, self.height - 1)
-            trap_tuple = (tx, ty)
-            if trap_tuple != (0, 0) and trap_tuple not in self.walls and trap_tuple not in self.food_positions:
-                self.toxic_traps.add(trap_tuple)
+            pos = (tx, ty)
+            if pos != (0, 0) and pos not in self.walls and pos not in self.food_positions:
+                self.toxic_traps.add(pos)
 
         self.score = 0
         self.steps = 0
@@ -51,14 +51,17 @@ class VisualGridHuntGame:
 
     def get_percept(self) -> dict:
         return {
-            'agent_pos': list(self.agent_pos),
-            'opponent_positions': [list(op) for op in self.opponents],
+            'agent_pos': tuple(self.agent_pos),
+            'opponent_positions': [tuple(op) for op in self.opponents],
             'smells_food': tuple(self.agent_pos) in self.food_positions,
             'hit_wall': tuple(self.agent_pos) in self.walls,
             'collision': self.collision,
             'score': self.score,
             'remaining_food': len(self.food_positions),
-            'smells_toxin': tuple(self.agent_pos) in self.toxic_traps
+            'smells_toxin': tuple(self.agent_pos) in self.toxic_traps,
+            'grid_size': (self.width, self.height),
+            'walls': list(self.walls),
+            'all_food': list(self.food_positions),
         }
 
     def execute_action(self, action: str):
@@ -85,7 +88,7 @@ class VisualGridHuntGame:
             self.score += 20
 
         if tuple_pos in self.toxic_traps:
-            self.score -= 15 # NEWLY ADDED - Penalty for stepping on a toxic trap.
+            self.score -= 15
 
         for op in self.opponents:
             move = random.choice(['Up', 'Down', 'Left', 'Right', 'Stay'])
@@ -122,6 +125,9 @@ class GridGameGUI:
 
         canvas_w = self.env.width * self.cell_size
         canvas_h = self.env.height * self.cell_size
+
+        self.search_agent = SearchAgent()
+        self.search_agent.active_algo = 'UCS'  # You can switch to 'BFS' or 'DFS' as needed
 
         self.canvas = tk.Canvas(root, width=canvas_w, height=canvas_h, bg="white")
         self.canvas.pack()
@@ -161,13 +167,11 @@ class GridGameGUI:
                                     outline="#d97706")
 
         for tx, ty in self.env.toxic_traps:
-            offset = self.cell_size * 0.2
+            offset = self.cell_size * 0.25
             x1 = tx * self.cell_size + offset
             y1 = (self.env.height - 1 - ty) * self.cell_size + offset
-            self.canvas.create_polygon(x1 + self.cell_size * 0.3, y1,                        
-                x1, y1 + self.cell_size * 0.6,                        
-                x1 + self.cell_size * 0.6, y1 + self.cell_size * 0.6,fill="#9333ea", 
-                                    outline="#581c87")
+            self.canvas.create_rectangle(x1, y1, x1 + self.cell_size * 0.5, y1 + self.cell_size * 0.5,
+                                         fill="#7c3aed", outline="#5b21b6")
 
         for ox, oy in self.env.opponents:
             offset = self.cell_size * 0.2
@@ -188,7 +192,8 @@ class GridGameGUI:
 
         def step():
             if not self.env.is_done():
-                action = random.choice(['Up', 'Down', 'Left', 'Right'])
+                percept = self.env.get_percept()
+                action = self.search_agent.sense_and_act(percept)
                 self.env.execute_action(action)
 
                 self.draw_grid()
