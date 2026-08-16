@@ -1,6 +1,7 @@
 # visual_grid_game.py
 import random
 import tkinter as tk
+from agent import ModelBasedAgent
 
 
 class VisualGridHuntGame:
@@ -9,7 +10,9 @@ class VisualGridHuntGame:
     def __init__(self, width=10, height=10, num_food=10, num_opponents=2, custom_walls=None):
         self.width = width
         self.height = height
+
         self.agent_pos = [0, 0]  # Starting position (x, y)
+        self.facing = 'Right'
 
         if custom_walls is not None:
             self.walls = set(custom_walls)
@@ -49,21 +52,48 @@ class VisualGridHuntGame:
         self.steps = 0
         self.collision = False
 
-    def get_percept(self) -> dict:
-        return {
-            'agent_pos': list(self.agent_pos),
-            'opponent_positions': [list(op) for op in self.opponents],
-            'smells_food': tuple(self.agent_pos) in self.food_positions,
-            'hit_wall': tuple(self.agent_pos) in self.walls,
-            'collision': self.collision,
-            'score': self.score,
-            'remaining_food': len(self.food_positions),
-            'smells_toxin': tuple(self.agent_pos) in self.toxic_traps
-        }
+    def get_percept(self):
+            #Save the agent current position
+            x,y = self.agent_pos
+
+            #change coordinated according to the agent's move
+            directions = {
+                'Up':(0,1),
+                'Down':(0,-1),
+                'Left':(-1,0),
+                'Right':(1,0)
+            }
+
+            #get the direction the agent is currently facing
+            dx,dy  = directions [self.facing]
+
+            #calculate grid position infront of the agent
+            ahead = (x+dx,y+dy)
+
+            #chec whether there is a wall ahead
+            wall_ahead = (
+                ahead[0] < 0 or
+                ahead [0] >= self.width or 
+                ahead [1] < 0 or
+                ahead [1] >= self.height or
+                ahead in self.walls
+            )
+
+            #check whether the food is at the current position or not
+            food_here = (x,y) in self.food_positions
+
+            #return the percept
+            return{
+                'wall_ahead': wall_ahead,
+                'food_here': food_here
+            }
 
     def execute_action(self, action: str):
         self.steps += 1
         new_pos = list(self.agent_pos)
+
+        if action in ['Up', 'Down', 'Left', 'Right']:
+            self.facing = action 
 
         if action == 'Up':
             new_pos[1] = min(self.height - 1, new_pos[1] + 1)
@@ -103,7 +133,7 @@ class VisualGridHuntGame:
                 self.collision = True
 
     def is_done(self) -> bool:
-        return len(self.food_positions) == 0 or self.steps >= 60 or self.collision
+        return len(self.food_positions) == 0 or self.steps >= 200 or self.collision
 
 
 class GridGameGUI:
@@ -115,6 +145,7 @@ class GridGameGUI:
 
         self.env = VisualGridHuntGame(width=width, height=height, num_food=num_food, num_opponents=num_opponents,
                                       custom_walls=walls)
+        self.agent = ModelBasedAgent() 
 
         # Dynamically calculate cell size so the total canvas fits nicely within a 600x600 window ceiling
         max_canvas_dim = 600
@@ -185,12 +216,14 @@ class GridGameGUI:
 
     def run_loop(self):
         self.btn.config(state="disabled")
-
         def step():
             if not self.env.is_done():
-                action = random.choice(['Up', 'Down', 'Left', 'Right'])
+                percept = self.env.get_percept()
+                
+                action = self.agent.sense_and_act(percept)
+                
                 self.env.execute_action(action)
-
+                
                 self.draw_grid()
                 self.label.config(text=f"Score: {self.env.score} | Steps: {self.env.steps} | Action: {action}")
                 self.root.after(250, step)
@@ -198,7 +231,6 @@ class GridGameGUI:
                 end_text = f"Collision! Game Over! Final Score: {self.env.score}" if self.env.collision else f"Finished! Final Score: {self.env.score}"
                 self.label.config(text=end_text)
                 self.btn.config(state="normal")
-
         step()
 
 
