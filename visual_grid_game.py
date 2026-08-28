@@ -127,7 +127,7 @@ class GridGameGUI:
         canvas_h = self.env.height * self.cell_size
 
         self.search_agent = SearchAgent()
-        self.search_agent.active_algo = 'UCS'  # You can switch to 'BFS' or 'DFS' as needed
+        self.search_agent.active_algo = 'AStar'  # You can switch to 'BFS' or 'DFS' as needed
 
         self.canvas = tk.Canvas(root, width=canvas_w, height=canvas_h, bg="white")
         self.canvas.pack()
