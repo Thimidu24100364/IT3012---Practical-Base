@@ -3,6 +3,7 @@ import heapq
 import random
 import math
 from collections import deque
+from logic_engine import KnowledgeBase 
 
 class SimpleReflexAgent:
     """A memoryless agent that reacts only to the current percept."""
@@ -69,7 +70,11 @@ class SearchAgent:
     def __init__(self):
         self.plan = []
         self.active_algo = 'BFS'
-        
+
+        self.kb = KnowledgeBase()
+        self.kb.tell_rule(['TargetVisible', 'HasDust'], 'SafeToEngage')
+        self.kb.tell_rule(['SafeToEngage', 'BloodseekerMissing'], 'Retreat')
+    
         # Testing Checkpoint: Verify heuristics as requested in Step 1.1
         print(f"Manhattan Test (0,0) to (3,4): {self.manhattan_distance((0,0), (3,4))}")
         print(f"Euclidean Test (0,0) to (3,4): {self.euclidean_distance((0,0), (3,4))}")
@@ -171,15 +176,27 @@ class SearchAgent:
 
             for next_pos, action in self._neighbors(current_pos, wall_set, (width, height)):
                 if next_pos not in reached_states:
+                    # --- PRACTICAL 05: Feasibility Validation ---
+                    self.kb.clear_facts()
+                    
+                    if next_pos == (5, 5): 
+                        self.kb.tell_fact('TargetVisible')
+                        self.kb.tell_fact('HasDust')
+                        self.kb.tell_fact('BloodseekerMissing')
+                    
+                    self.kb.forward_chain()
+                    
+                    # If the logic engine deduces a retreat is necessary, skip this tile entirely
+                    if 'Retreat' in self.kb.facts:
+                        continue 
+                    # --------------------------------------------
+
                     new_g = g_cost + 1
                     
                     if heuristic_type == 'manhattan':
                         h_cost = self.manhattan_distance(next_pos, goal_pos)
                     else:
                         h_cost = self.euclidean_distance(next_pos, goal_pos)
-                        
-                    new_f = new_g + h_cost
-                    heapq.heappush(frontier, (new_f, new_g, next_pos, path + [action]))
         return None
 
     def sense_and_act(self, percept: dict) -> str:
